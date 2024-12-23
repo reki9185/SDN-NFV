@@ -6,6 +6,22 @@ deploy:
 onosproject/onos:2.7-latest
 	sudo ./topo_utils.sh
 
+install:
+	onos-app localhost install! lab3/bridge/bridge-app-1.0-SNAPSHOT.oar
+	onos-app localhost install! lab3/proxyarp/proxyarp-1.0-SNAPSHOT.oar
+#	onos-app localhost install! vrouter/vrouter-1.0-SNAPSHOT.oar
+#	onos-app localhost install! proxyarp/proxyarp-1.0-SNAPSHOT.oar
+
+uninstall:
+	onos-app localhost deonactivate nycu.winlab.bridge
+	onos-app localhost uninstall nycu.winlab.bridge
+	onos-app localhost deonactivate nycu.winlab.proxyarp
+	onos-app localhost uninstall nycu.winlab.proxyarp
+#	onos-app localhost deonactivate nycu.winlab.bridge
+#	onos-app localhost uninstall nycu.winlab.bridge
+#	onos-app localhost deonactivate nycu.winlab.proxyarp
+#	onos-app localhost uninstall nycu.winlab.proxyarp
+
 clean:
 	@docker ps -q | xargs -r docker stop
 	@docker ps -aq | xargs -r docker rm -f
