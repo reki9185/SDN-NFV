@@ -1,0 +1,16 @@
+all:
+
+deploy:
+	docker run --name onos -d -p 6653:6653 -p 8181:8181 -p 8101:8101 \
+-e ONOS_APPS=drivers,fpm,gui2,hostprovider,lldpprovider,openflow,openflow-base,optical-model,route-service \
+onosproject/onos:2.7-latest
+	sudo ./topo_utils.sh
+
+clean:
+	@docker ps -q | xargs -r docker stop
+	@docker ps -aq | xargs -r docker rm -f
+	sudo ovs-vsctl del-controller ovs1
+	sudo ovs-vsctl del-controller ovs2
+	sudo ovs-vsctl del-br ovs1
+	sudo ovs-vsctl del-br ovs2
+	sudo ip link delete vethovs1ovs2
