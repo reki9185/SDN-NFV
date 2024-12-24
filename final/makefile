@@ -7,20 +7,20 @@ onosproject/onos:2.7-latest
 	sudo ./topo_utils.sh
 
 install:
-	onos-app localhost install! lab3/bridge/bridge-app-1.0-SNAPSHOT.oar
-	onos-app localhost install! lab3/proxyarp/proxyarp-1.0-SNAPSHOT.oar
-#	onos-app localhost install! vrouter/vrouter-1.0-SNAPSHOT.oar
-#	onos-app localhost install! proxyarp/proxyarp-1.0-SNAPSHOT.oar
+	onos-app localhost install! ./lab3/bridge-app/target/bridge-app-1.0-SNAPSHOT.oar
+	onos-app localhost install! ./lab3/proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
+#	onos-app localhost install! vrouter/target/vrouter-1.0-SNAPSHOT.oar
+#	onos-app localhost install! proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
 
 uninstall:
 	onos-app localhost deonactivate nycu.winlab.bridge
 	onos-app localhost uninstall nycu.winlab.bridge
 	onos-app localhost deonactivate nycu.winlab.proxyarp
 	onos-app localhost uninstall nycu.winlab.proxyarp
-#	onos-app localhost deonactivate nycu.winlab.bridge
-#	onos-app localhost uninstall nycu.winlab.bridge
-#	onos-app localhost deonactivate nycu.winlab.proxyarp
-#	onos-app localhost uninstall nycu.winlab.proxyarp
+#	onos-app localhost deonactivate nycu.sdnfv.vrouter
+#	onos-app localhost uninstall nycu.sdnfv.vrouter
+#	onos-app localhost deonactivate nycu.sdnfv.proxyarp
+#	onos-app localhost uninstall nycu.sdnfv.proxyarp
 
 clean:
 	@docker ps -q | xargs -r docker stop

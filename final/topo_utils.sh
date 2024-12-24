@@ -107,13 +107,11 @@ add_container $ROUTERIMAGE R2 -v $(realpath config/R2/frr.conf):/etc/frr/frr.con
 add_container $HOSTIMAGE h1
 add_container $HOSTIMAGE h2
 
-create_veth_pair vethR1h2_ipv4 vethh2R1_ipv4
-set_intf_container R1 vethR1h2_ipv4 172.17.4.1/24 
-set_intf_container h2 vethh2R1_ipv4 172.17.4.2/24 172.17.4.1
-
-# create_veth_pair veth0 veth1
-# set_v6intf_container R1 veth0 2a0b:4e07:c4:104::1/64
-# set_v6intf_container h2 veth1 2a0b:4e07:c4:104::2/64 2a0b:4e07:c4:104::1
+create_veth_pair vethR1h2 vethh2R1
+set_intf_container R1 vethR1h2 172.17.4.1/24 
+set_intf_container h2 vethh2R1 172.17.4.2/24 172.17.4.1
+set_v6intf_container R1 vethR1h2 2a0b:4e07:c4:104::1/64
+set_v6intf_container h2 vethh2R1 2a0b:4e07:c4:104::2/64 2a0b:4e07:c4:104::1
 
 # sudo ovs-vsctl add-br ovs1 -- set bridge ovs1 protocols=OpenFlow14 -- set-controller ovs1 tcp:192.168.100.1:6653
 # sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 protocols=OpenFlow14 -- set-controller ovs2 tcp:192.168.100.1:6653
@@ -133,8 +131,9 @@ sudo ovs-docker add-port ovs1 eth7 R2 --ipaddress=fd63::1/64
 sudo ovs-docker add-port ovs1 eth8 R2 --ipaddress=2a0b:4e07:c4:4::1/64
 sudo ovs-docker add-port ovs2 eth9 R2 --ipaddress=fd70::4/64
 
+set_v6intf_container h2 vethh1ovs2 2a0b:4e07:c4:4::2/64 2a0b:4e07:c4:4::1
 sudo ovs-docker add-port ovs2 eth10 h1 --ipaddress=2a0b:4e07:c4:4::1/64
 
-sudo ovs-docker add-port ovs1 eth11 R1 --ipaddress=2a0b:4e07:c4:104::1/64
+# sudo ovs-docker add-port ovs1 eth11 R1 --ipaddress=2a0b:4e07:c4:104::1/64
 
 sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4
