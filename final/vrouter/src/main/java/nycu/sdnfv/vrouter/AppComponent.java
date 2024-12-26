@@ -200,26 +200,10 @@ public class AppComponent {
             MacAddress mac1 = MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac1());
             MacAddress mac2 = MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac2());
 
-            arpTable.put(ip1, mac1);
-            arpTable.put(ip2, mac2);
-
-            if (ethPkt.getEtherType() == Ethernet.TYPE_ARP) {
-                ARP arpPkt = (ARP) ethPkt.getPayload();
-                Ip4Address dstIP  = Ip4Address.valueOf(arpPkt.getTargetProtocolAddress());
-                if (arpPkt.getOpCode() == ARP.OP_REQUEST) {
-                    if (arpTable.get(dstIP) != null) {
-                        arpReply(ethPkt, dstIP, arpTable.get(dstIP), recDevId, recPort);
-                        // log.info("TABLE HIT. Requested MAC = " + arpTable.get(dstIP).toString());
-                    } else {
-                        // log.info("TABLE MISS. Requested MAC = " + arpTable.get(dstIP).toString());
-                    }
-                }
-            } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV4) {
+            if (ethPkt.getEtherType() == Ethernet.TYPE_IPV4) {
                 ConnectPoint ingress = pkt.receivedFrom();
                 String host1 = cfgService.getConfig(appId, NameConfig.class).host1();
                 String host2 = cfgService.getConfig(appId, NameConfig.class).host2();
-                // ConnectPoint egress1 = new ConnectPoint(DeviceId.deviceId(host2), PortNumber.portNumber(1));
-                // ConnectPoint egress2 = new ConnectPoint(DeviceId.deviceId(host1), PortNumber.portNumber(1));
                 ConnectPoint egress;
 
                 TrafficSelector selector;
@@ -241,7 +225,7 @@ public class AppComponent {
                             .matchEthDst(dstMac)
                             .build();
                 createIntent(ingress, egress, selector);
-            }
+            } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) 
         }
     }
 
@@ -266,54 +250,44 @@ public class AppComponent {
             ingress.deviceId(), ingress.port(), egress.deviceId(), egress.port());
     }
 
-    private void installRule(Meter meter) {
-        TrafficSelector selector1 = DefaultTrafficSelector.builder()
-            .matchInPort(PortNumber.portNumber(1))
-            .matchEthType(Ethernet.TYPE_IPV4)
-            .build();
+    private void interDomain () {
+        InboundPacket pkt = context.inPacket();
+        Ethernet ethPkt = pkt.parsed();
+        IPv4 payload = (IPv4) ethPkt.getPayload();
+        Ip4Address srcIP = Ip4Address.valueOf(payload.getSourceAddress());
+        Ip4Address dstIP = Ip4Address.valueOf(payload.getDestinationAddress());
 
-        TrafficTreatment treatment1 = DefaultTrafficTreatment.builder()
-            .group(GroupId.valueOf(1))
-            .build();
-        FlowRule flowRule1 = DefaultFlowRule.builder()
-            .forDevice(DeviceId.deviceId("of:0000000000000001"))
-            .withSelector(selector1)
-            .withTreatment(treatment1)
-            .withPriority(500)
-            .fromApp(appId)
-            .makePermanent()
-            .build();
-        flowRuleService.applyFlowRules(flowRule1);
+        // ANS65040 -> ANS65041
+        if (IpPrefix.valueOf("172.17.4.0/24").contains(dstIP)) {
+            Host dstHost = hostService.getHostsByIp(dstIP).iterator().next();
+            FilteredConnectPoint ingressPoint = new FilteredConnectPoint(pkt.receivedFrom());
 
-        TrafficSelector selector2 = DefaultTrafficSelector.builder()
-            .matchEthType(Ethernet.TYPE_IPV4)
-            .matchEthSrc(MacAddress.valueOf("00:00:00:00:00:01"))
-            .build();
+            FilteredConnectPoint egressPoint = new FilteredConnectPoint(
+                new ConectPoint(dstHost.location().deviceId(), dstHost.location().port())
+            );
 
-        TrafficTreatment treatment2 = DefaultTrafficTreatment.builder()
-            .setOutput(PortNumber.portNumber(2))
-            .meter(meter.id())
-            .build();
-        FlowRule flowRule2 = DefaultFlowRule.builder()
-            .forDevice(DeviceId.deviceId("of:0000000000000004"))
-            .withSelector(selector2)
-            .withTreatment(treatment2)
-            .withPriority(500)
-            .fromApp(appId)
-            .makePermanent()
-            .build();
-        flowRuleService.applyFlowRules(flowRule2);
+            TrafficSelector.Builder selector = DefaultTrafficSelector.builder()
+                .matchIPDst(IpPrefix.valueOf(dstIP.toString() + "/32"))
+                .matchEthType(Ethernet.TYPE_IPV4);
 
-    }
+            TrafficTreatment.Builder treatment = DefaultTrafficTreatment.builder()
+                .setEthSrc(MacAddress.valueOf());
+                .setEthDst(dstHost.mac());
 
-    private void arpReply(Ethernet ethPkt, Ip4Address dstIP, MacAddress dstMac, DeviceId recDevId, PortNumber recPort) {
-        // Create and send an ARP reply
-        // public static Ethernet buildArpReply(Ip4Address srcIp, MacAddress srcMac, Ethernet request)
-        Ethernet arpReply = ARP.buildArpReply(dstIP, dstMac, ethPkt);
-        ByteBuffer buf = ByteBuffer.wrap(arpReply.serialize());
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder().setOutput(recPort).build();
-        OutboundPacket pkt = new DefaultOutboundPacket(recDevId, treatment, buf);
-        packetService.emit(pkt);
+            PointToPointIntent intent = PointToPointIntent.builder()
+                .appId(appId)
+                .priority(200)
+                .filteredIngressPoint(ingressPoint)
+                .filteredEgressPoint(egressPoint)
+                .selector(selector.build())
+                .treatment(treatment.build())
+                .build();
+
+            intentService.submit(intent);
+        // ANS65041 -> ANS65040
+        } else {
+            // get bgp table in route service
+        }
     }
 
 }
