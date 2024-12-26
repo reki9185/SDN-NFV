@@ -26,6 +26,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -41,7 +44,12 @@ import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.ARP;
+import org.onlab.packet.IPv6;
 import org.onlab.packet.Ip4Address;
+import org.onlab.packet.Ip6Address;
+import org.onlab.packet.ndp.NeighborAdvertisement;
+import org.onlab.packet.ndp.NeighborSolicitation;
+import org.onlab.packet.IPacket;
 
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.DeviceId;
@@ -87,10 +95,11 @@ public class AppComponent {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected EdgePortService edgePortService;
 
-    private LearningBridgeProcessor processor = new LearningBridgeProcessor();
+    private ProxyarpProcessor processor = new ProxyarpProcessor();
     private ApplicationId appId;
     // private Map<DeviceId, Map<MacAddress, PortNumber>> bridgeTable = new HashMap<>();
     private Map<Ip4Address, MacAddress> arpTable = new HashMap<>();
+    private Map<Ip6Address, MacAddress> ndpTable = new HashMap<>();
 
     @Activate
     protected void activate() {
@@ -190,12 +199,12 @@ public class AppComponent {
                 Ip6Address srcIP  = Ip6Address.valueOf(arpPkt.getSenderProtocolAddress());
                 Ip6Address dstIP  = Ip6Address.valueOf(arpPkt.getTargetProtocolAddress());
                 MacAddress srcMac = ethPkt.getSourceMAC();
-                MacAddress dstMac = arpTable.get(dstIP);
+                MacAddress dstMac = ndpTable.get(dstIP);
 
-                findNDP(ethPkt).ifPresent(ndPayload -> {
-                    if (ndPayload instanceof NeighborSolicitation){
+                findNdp(ethPkt).ifPresent(ndPayload -> {
+                    if (ndPayload instanceof NeighborSolicitation) {
                         NeighborSolicitation ns = (NeighborSolicitation) ndPayload;
-                        arpTable.put(srcIP, srcMac);
+                        ndpTable.put(srcIP, srcMac);
 
                         if (dstMac == null) {
                             log.info("Ipv6 TABLE MISS. Send requset to edge ports");
@@ -208,10 +217,10 @@ public class AppComponent {
                             }
                         } else {
                             log.info("Ipv6 TABLE HIT. Send Neighbor Advertisement");
-                            NdpAdv(ethPkt, dstIP, dstMac, recDevId, recPort);
+                            ndpAdv(ethPkt, dstIP, dstMac, recDevId, recPort);
                         }
                     }
-                });  
+                });
             }
         }
     }
@@ -233,11 +242,11 @@ public class AppComponent {
         packetService.emit(pkt);
     }
 
-    private Optional<NeighborSolicitation>findNDP(Ethernet ethPkt) {
-        reutrn Stream.of(packet)
+    private Optional<NeighborSolicitation> findNdp(Ethernet ethPkt) {
+        return Stream.of(ethPkt)
                 .filter(Objects::nonNull)
                 .map(Ethernet::getPayload)
-                .filter(p -> p instanceof Ipv6)
+                .filter(p -> p instanceof IPv6)
                 .filter(Objects::nonNull)
                 .map(IPacket::getPayload)
                 .filter(p -> p instanceof NeighborSolicitation)
@@ -245,7 +254,7 @@ public class AppComponent {
                 .findFirst();
     }
 
-    private void NdpAdv(Ethernet ethPkt, Ip6Address dstIP, MacAddress datMac, DeviceId recDevIdId, PortNumber recPort) {
+    private void ndpAdv(Ethernet ethPkt, Ip6Address dstIP, MacAddress dstMac, DeviceId recDevId, PortNumber recPort) {
         Ethernet naPkt = NeighborAdvertisement.buildNdpAdv(dstIP, dstMac, ethPkt);
         ByteBuffer buf = ByteBuffer.wrap(naPkt.serialize());
         TrafficTreatment treatment = DefaultTrafficTreatment.builder().setOutput(recPort).build();

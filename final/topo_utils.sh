@@ -143,15 +143,9 @@ sudo ovs-docker add-port ovs1 eth3 R2 --ipaddress=172.16.4.69/24
 docker exec -it R2 ip -6 addr add 2a0b:4e07:c4:4::69/64 dev eth3
 sudo ovs-docker add-port ovs2 eth4 R2 --ipaddress=192.168.70.4/24
 docker exec -it R2 ip -6 addr add fd70::4/64 dev eth4
-sudo ovs-docker add-port ovs2 eth5 R2 --ipaddress=192.168.61.4/24
+# sudo ovs-docker add-port ovs2 eth5 R2 --ipaddress=192.168.61.4/24
 build_ovs_container_path ovs2 h1 172.16.4.2/24 172.16.4.69
 set_v6intf_container h1 vethh1ovs2 2a0b:4e07:c4:4::2/64 2a0b:4e07:c4:4::69
 build_ovs_path ovs1 ovs2
 
-create_veth_pair veth0 veth1
-sudo ovs-vsctl add-port ovs2 veth0
-sudo ip a add 192.168.100.1/24 dev veth1
-
-# sudo ovs-docker add-port ovs1 eth11 R1 --ipaddress=2a0b:4e07:c4:104::1/64
-
-sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4
+# sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4

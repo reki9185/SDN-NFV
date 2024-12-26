@@ -7,11 +7,10 @@ onosproject/onos:2.7-latest
 	docker compose up -d
 	sudo ./topo_utils.sh
 
-install:
+	sleep 15
 	onos-app localhost install! ./lab3/bridge-app/target/bridge-app-1.0-SNAPSHOT.oar
-	onos-app localhost install! ./lab3/proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
 #	onos-app localhost install! vrouter/target/vrouter-1.0-SNAPSHOT.oar
-#	onos-app localhost install! proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
+	onos-app localhost install! proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
 
 uninstall:
 	onos-app localhost deactivate nycu.winlab.bridge
@@ -25,11 +24,8 @@ uninstall:
 
 clean:
 	docker compose down
-#	@docker ps -q | xargs -r docker stop
-#	@docker ps -aq | xargs -r docker rm -f
 	sudo ovs-vsctl del-controller ovs1
 	sudo ovs-vsctl del-controller ovs2
 	sudo ovs-vsctl del-br ovs1
 	sudo ovs-vsctl del-br ovs2
 	sudo ip link delete vethovs1ovs2
-	sudo ip link delete veth0
