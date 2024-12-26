@@ -1,8 +1,42 @@
 {
+    "ports":{
+        "of:0000ceefffee9943/3":{
+            "interfaces":[
+                {
+                    "name":"intf1",
+                    "ips":[
+                        "192.168.70.4/24",
+                        "fd70::4/64",
+                        "fe80::42:c0ff:fea8:46fd/128"
+                    ]
+                }
+            ]
+        },
+        "of:0000000000000001/":{
+            "interfaces":[
+                {
+                    "name":"intf2",
+                    "ips":[
+                        "192.168.63.1/24"
+                    ]
+                }
+            ]
+        },
+        "of:0000000000000001/":{
+            "interfaces":[
+                {
+                    "name":"intf3",
+                    "ips":[
+                        "192.168.63.2/24"
+                    ]
+                }
+            ]
+        }
+    },
     "apps":{
         "nycu.sdnfv.vrouter":{
             "router":{
-                "vrrouting":"of:of:0000000000000001/4",
+                "vrrouting":"of:0000000000000001/4",
                 "vrrouting-mac":"56:6c:11:ed:b9:28",
                 "gateway-ip4":"172.16.4.1",
                 "gateway-ip6":"2a0b:4e07:c4:4::1",

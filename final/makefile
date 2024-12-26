@@ -7,7 +7,7 @@ onosproject/onos:2.7-latest
 	docker compose up -d
 	sudo ./topo_utils.sh
 
-	sleep 15
+install:
 	onos-app localhost install! ./lab3/bridge-app/target/bridge-app-1.0-SNAPSHOT.oar
 #	onos-app localhost install! vrouter/target/vrouter-1.0-SNAPSHOT.oar
 	onos-app localhost install! proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
@@ -29,3 +29,4 @@ clean:
 	sudo ovs-vsctl del-br ovs1
 	sudo ovs-vsctl del-br ovs2
 	sudo ip link delete vethovs1ovs2
+	sudo ip link delete veth0

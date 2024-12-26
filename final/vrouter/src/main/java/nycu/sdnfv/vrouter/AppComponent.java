@@ -250,7 +250,14 @@ public class AppComponent {
             ingress.deviceId(), ingress.port(), egress.deviceId(), egress.port());
     }
 
-    private void interDomain () {
+    private void intraDomain() {
+
+    }
+
+    private void interDomain() {
+        // 1. Look up the RouteTable
+        // 2. Check if the packet's dst = next hop -> intradomain()
+        
         InboundPacket pkt = context.inPacket();
         Ethernet ethPkt = pkt.parsed();
         IPv4 payload = (IPv4) ethPkt.getPayload();
@@ -276,7 +283,7 @@ public class AppComponent {
 
             PointToPointIntent intent = PointToPointIntent.builder()
                 .appId(appId)
-                .priority(200)
+                .priority(300)
                 .filteredIngressPoint(ingressPoint)
                 .filteredEgressPoint(egressPoint)
                 .selector(selector.build())
@@ -289,5 +296,4 @@ public class AppComponent {
             // get bgp table in route service
         }
     }
-
 }
