@@ -15,10 +15,12 @@
  */
 package nycu.sdnfv.vrouter;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+// import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collection;
+// import java.util.Collections;
+// import java.util.HashMap;
+// import java.util.Map;
 
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -29,14 +31,17 @@ import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.MacAddress;
-import org.onlab.packet.Ip4Address;
+import org.onlab.packet.IpAddress;
+import org.onlab.packet.Ip6Address;
+// import org.onlab.packet.IpAddress;
+import org.onlab.packet.IPv4;
+// import org.onlab.packet.IPv6;
+// import org.onlab.packet.IpPrefix;
 
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.core.GroupId;
 
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.DeviceId;
@@ -53,31 +58,31 @@ import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.InboundPacket;
-import org.onosproject.net.packet.OutboundPacket;
-import org.onosproject.net.packet.DefaultOutboundPacket;
+// import org.onosproject.net.packet.OutboundPacket;
+// import org.onosproject.net.packet.DefaultOutboundPacket;
 
 import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.PointToPointIntent;
 
 import org.onosproject.net.intf.InterfaceService;
 
+import org.onosproject.net.host.InterfaceIpAddress;
+
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.FlowRuleService;
-import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.DefaultFlowRule;
+// import org.onosproject.net.flow.FlowRule;
+// import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 
-import org.onosproject.routeservice.ResolvedRoute;
-import org.onosproject.routeservice.RouteEvent;
+// import org.onosproject.routeservice.ResolvedRoute;
+// import org.onosproject.routeservice.RouteEvent;
 import org.onosproject.routeservice.RouteInfo;
-import org.onosproject.routeservice.RouteListener;
+// import org.onosproject.routeservice.RouteListener;
 import org.onosproject.routeservice.RouteService;
 import org.onosproject.routeservice.RouteTableId;
-
-import java.nio.ByteBuffer;
 
 import static org.onosproject.net.config.NetworkConfigEvent.Type.CONFIG_ADDED;
 import static org.onosproject.net.config.NetworkConfigEvent.Type.CONFIG_UPDATED;
@@ -90,18 +95,30 @@ import static org.onosproject.net.config.basics.SubjectFactories.APP_SUBJECT_FAC
 public class AppComponent {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final NameConfigListener cfgListener = new NameConfigListener();
+    private final VRouterConfigListener vRouterListener = new VRouterConfigListener();
 
     private final ConfigFactory<ApplicationId, VRouterConfig> factory = new ConfigFactory<ApplicationId, VRouterConfig>(
-            APP_SUBJECT_FACTORY, vrouterconfig.class, "router") {
+            APP_SUBJECT_FACTORY, VRouterConfig.class, "router") {
         @Override
         public VRouterConfig createConfig() {
             return new VRouterConfig();
         }
     };
 
-  private ApplicationId appId;
-  private Map<Ip4Address, MacAddress> arpTable = new HashMap<>();
+    private ApplicationId appId;
+    // private Map<IpAddress, MacAddress> arpTable = new HashMap<>();
+    // private VRouterPacketProcessor processor = new VRouterPacketProcessor();
+
+    ConnectPoint frrCp;
+    MacAddress frrMac;
+    IpAddress gatewayIP4;
+    Ip6Address gatewayIP6;
+    MacAddress gatewayMac;
+
+    ArrayList<IpAddress> peers4IP = new ArrayList<IpAddress>();
+    ArrayList<ConnectPoint> peers4Cp = new ArrayList<ConnectPoint>();
+    ArrayList<Ip6Address> peers6IP = new ArrayList<Ip6Address>();
+    ArrayList<ConnectPoint> peers6Cp = new ArrayList<ConnectPoint>();
 
     /** Some configurable property. */
     private String someProperty;
@@ -134,11 +151,11 @@ public class AppComponent {
     protected void activate() {
         // register your app
         appId = coreService.registerApplication("nycu.sdnfv.vrouter");
-        cfgService.addListener(cfgListener);
+        cfgService.addListener(vRouterListener);
         cfgService.registerConfigFactory(factory);
 
         // add a packet processor to packetService
-        packetService.addProcessor(processor, PacketProcessor.director(2));
+        // packetService.addProcessor(processor, PacketProcessor.director(2));
 
         // install a flowrule for packet-in
         TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
@@ -149,15 +166,15 @@ public class AppComponent {
 
     @Deactivate
     protected void deactivate() {
-        cfgService.removeListener(cfgListener);
+        cfgService.removeListener(vRouterListener);
         cfgService.unregisterConfigFactory(factory);
 
         // remove flowrule installed by your app
         flowRuleService.removeFlowRulesById(appId);
 
         // remove your packet processor
-        packetService.removeProcessor(processor);
-        processor = null;
+        // packetService.removeProcessor(processor);
+        // processor = null;
 
         // remove flowrule you installed for packet-in
         TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
@@ -166,27 +183,77 @@ public class AppComponent {
         log.info("Stopped");
     }
 
-    private class NameConfigListener implements NetworkConfigListener {
+    private class VRouterConfigListener implements NetworkConfigListener {
         @Override
         public void event(NetworkConfigEvent event) {
             if ((event.type() == CONFIG_ADDED || event.type() == CONFIG_UPDATED)
-                && event.configClass().equals(vrouterconfig.class)) {
-                interfaceService.getMatchingInterface(IpAddress.valueOf("192.168.70.4")).connectPoint();
+                && event.configClass().equals(VRouterConfig.class)) {
+
+                VRouterConfig config = cfgService.getConfig(appId, VRouterConfig.class);
+                if (config != null) {
+                    frrCp = config.getFrroutingCP();
+                    frrMac = config.getFrroutingMac();
+                    gatewayIP4 = config.getGatewayIPv4();
+                    gatewayIP6 = config.getGatewayIPv6();
+                    gatewayMac = config.getGatewayMac();
+
+                    peers4IP = config.getIPv4Peers();
+                    peers6IP = config.getIPv6Peers();
+
+                    log.info("frrMac: " + frrMac);
+
+                    for (IpAddress ip4 : peers4IP) {
+                        // Interface peerIntf = interfaceService.getMatchingInterface
+                        //    (IpAddress.valueOf("192.168.70.4")).connectPoint();
+                        ConnectPoint cp4 = interfaceService.getMatchingInterface(ip4).connectPoint();
+                        peers4Cp.add(cp4);
+
+                        // add intent for each peer
+                        // R2: frr
+                        IpAddress frrIP = (IpAddress) interfaceService.getMatchingInterface(ip4)
+                        .ipAddressesList().get(0).ipAddress();
+                        bgpIntent4(cp4, frrCp, frrIP);
+                        bgpIntent4(frrCp, cp4, ip4);
+                    }
+
+                    for (Ip6Address ip6 : peers6IP) {
+                        // Interface peerIntf = interfaceService.getMatchingInterface
+                        // (IpAddress.valueOf("192.168.70.4")).connectPoint();
+                        ConnectPoint cp6 = interfaceService.getMatchingInterface(ip6).connectPoint();
+                        peers6Cp.add(cp6);
+
+                        // add intent for each peer
+                        // R2: frr
+                        Ip6Address frrIP = (Ip6Address) interfaceService.getMatchingInterface(ip6)
+                        .ipAddressesList().stream()
+                            .filter(ip -> ip.ipAddress().isIp6())
+                            .map(InterfaceIpAddress::ipAddress)
+                            .findFirst()
+                            .orElse(null);
+                        bgpIntent6(cp6, frrCp, frrIP);
+                        bgpIntent6(frrCp, cp6, ip6);
+                    }
+                }
             }
         }
     }
 
-    private class Processor implements PacketProcessor {
+    private class VRouterPacketProcessor implements PacketProcessor {
         @Override
         public void process(PacketContext context) {
 
             if (context.isHandled()) {
                 return;
             }
+
             InboundPacket pkt = context.inPacket();
             Ethernet ethPkt = pkt.parsed();
 
             if (ethPkt == null) {
+                return;
+            }
+
+            if (ethPkt.getDestinationMAC().isLldp()) {
                 return;
             }
 
@@ -195,37 +262,23 @@ public class AppComponent {
             MacAddress srcMac = ethPkt.getSourceMAC();
             MacAddress dstMac = ethPkt.getDestinationMAC();
 
-            Ip4Address ip1 = Ip4Address.valueOf(cfgService.getConfig(appId, NameConfig.class).ip1());
-            Ip4Address ip2 = Ip4Address.valueOf(cfgService.getConfig(appId, NameConfig.class).ip2());
-            MacAddress mac1 = MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac1());
-            MacAddress mac2 = MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac2());
-
             if (ethPkt.getEtherType() == Ethernet.TYPE_IPV4) {
-                ConnectPoint ingress = pkt.receivedFrom();
-                String host1 = cfgService.getConfig(appId, NameConfig.class).host1();
-                String host2 = cfgService.getConfig(appId, NameConfig.class).host2();
-                ConnectPoint egress;
+                IPv4 payload = (IPv4) ethPkt.getPayload();
+                IpAddress dstIP = IpAddress.valueOf(payload.getDestinationAddress());
+                IpAddress srcIP = IpAddress.valueOf(payload.getSourceAddress());
+                log.info("The packet is from `{}` to `{}`.", recDevId, dstIP);
 
-                TrafficSelector selector;
+                inRoute();
 
-                // create intent h2 to h1
-                if (dstMac.equals(MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac1()))) {
-                    // egress = new ConnectPoint(DeviceId.deviceId(host1), PortNumber.portNumber(1));
-                    egress = ConnectPoint.deviceConnectPoint(host1);
-                // create intent s2 to h2
-                } else if (dstMac.equals(MacAddress.valueOf(cfgService.getConfig(appId, NameConfig.class).mac2()))) {
-                    //  egress = new ConnectPoint(DeviceId.deviceId(host2), PortNumber.portNumber(1));
-                    egress = ConnectPoint.deviceConnectPoint(host2);
-                } else {
-                    log.info("Egress `{}.`", dstMac);
-                    return;
+                /*if ((IpPrefix("172.16.4.0/24").contains(srcIP)) && (IpPrefix("172.16.4.0/24").contains(dstIP))) {
+                    intraDomain();
                 }
 
-                selector = DefaultTrafficSelector.builder()
-                            .matchEthDst(dstMac)
-                            .build();
-                createIntent(ingress, egress, selector);
-            } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) 
+                if ((IpPrefix("172.16.4.0/24").contains(srcIP)) && (IpPrefix("172.16.4.0/24").contains(dstIP))) {
+                    interDomain();
+                }*/
+
+            } // else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6)
         }
     }
 
@@ -250,27 +303,43 @@ public class AppComponent {
             ingress.deviceId(), ingress.port(), egress.deviceId(), egress.port());
     }
 
-    private void intraDomain() {
-
+    private void bgpIntent4(ConnectPoint ingress, ConnectPoint egress, IpAddress dstIP) {
+        TrafficSelector selector = DefaultTrafficSelector.builder()
+                    .matchEthType(Ethernet.TYPE_IPV4)
+                    .matchIPDst(dstIP.toIpPrefix())
+                    .build();
+        createIntent(ingress, egress, selector);
     }
 
-    private void interDomain() {
+    private void bgpIntent6(ConnectPoint ingress, ConnectPoint egress, Ip6Address dstIP) {
+        TrafficSelector selector = DefaultTrafficSelector.builder()
+                    .matchEthType(Ethernet.TYPE_IPV6)
+                    .matchIPDst(dstIP.toIpPrefix())
+                    .build();
+        createIntent(ingress, egress, selector);
+    }
+
+    private void intraDomain() {
+        // bridge-app
+    }
+
+    private void interDomain(PacketContext context) {
         // 1. Look up the RouteTable
         // 2. Check if the packet's dst = next hop -> intradomain()
-        
+
         InboundPacket pkt = context.inPacket();
         Ethernet ethPkt = pkt.parsed();
         IPv4 payload = (IPv4) ethPkt.getPayload();
-        Ip4Address srcIP = Ip4Address.valueOf(payload.getSourceAddress());
-        Ip4Address dstIP = Ip4Address.valueOf(payload.getDestinationAddress());
+        IpAddress srcIP = IpAddress.valueOf(payload.getSourceAddress());
+        IpAddress dstIP = IpAddress.valueOf(payload.getDestinationAddress());
 
-        // ANS65040 -> ANS65041
-        if (IpPrefix.valueOf("172.17.4.0/24").contains(dstIP)) {
+        // private RouteService routeService;
+        /*if (IpPrefix.valueOf("172.17.4.0/24").contains(dstIP)) {
             Host dstHost = hostService.getHostsByIp(dstIP).iterator().next();
             FilteredConnectPoint ingressPoint = new FilteredConnectPoint(pkt.receivedFrom());
 
             FilteredConnectPoint egressPoint = new FilteredConnectPoint(
-                new ConectPoint(dstHost.location().deviceId(), dstHost.location().port())
+                new ConnectPoint(dstHost.location().deviceId(), dstHost.location().port())
             );
 
             TrafficSelector.Builder selector = DefaultTrafficSelector.builder()
@@ -294,6 +363,22 @@ public class AppComponent {
         // ANS65041 -> ANS65040
         } else {
             // get bgp table in route service
+        }*/
+    }
+
+    private boolean inRoute() {
+
+        Collection<RouteTableId> routes = routeService.getRouteTables();
+        ArrayList<RouteTableId> routeTable = new ArrayList<RouteTableId>(routes);
+        for (RouteTableId tableId : routeTable) {
+            log.info("Route Table: {}", tableId);
         }
+
+        RouteTableId tableId = new RouteTableId("ipv4");
+        Collection<RouteInfo> routes2 = routeService.getRoutes(tableId);
+        for (RouteInfo route : routes2) {
+            log.info("Route: {}, Next Hop: {}", route.prefix(), route.bestRoute().get().nextHop());
+        }
+        return true;
     }
 }

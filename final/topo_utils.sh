@@ -129,8 +129,8 @@ set_intf_container h2 vethh2R1 172.17.4.2/24 172.17.4.1
 set_v6intf_container R1 vethR1h2 2a0b:4e07:c4:104::1/64
 set_v6intf_container h2 vethh2R1 2a0b:4e07:c4:104::2/64 2a0b:4e07:c4:104::1
 
-sudo ovs-vsctl add-br ovs1 -- set bridge ovs1 protocols=OpenFlow14 -- set-controller ovs1 tcp:192.168.100.1:6653
-sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 protocols=OpenFlow14 -- set-controller ovs2 tcp:192.168.100.1:6653
+sudo ovs-vsctl add-br ovs1 -- set bridge ovs1 other_config:datapath-id=0000000000000001 -- set bridge ovs1 protocols=OpenFlow14 -- set-controller ovs1 tcp:192.168.100.1:6653
+sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 other_config:datapath-id=0000000000000002 -- set bridge ovs2 protocols=OpenFlow14 -- set-controller ovs2 tcp:192.168.100.1:6653
 # sudo ovs-vsctl add-br ovs1 -- set bridge ovs1 protocols=OpenFlow14 -- set-controller ovs1 tcp:127.0.0.1:6653
 # sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 protocols=OpenFlow14 -- set-controller ovs2 tcp:127.0.0.1:6653
 
@@ -152,4 +152,4 @@ create_veth_pair veth0 veth1
 sudo ovs-vsctl add-port ovs2 veth0
 sudo ip a add 192.168.100.1/24 dev veth1
 
-sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4
+# sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4

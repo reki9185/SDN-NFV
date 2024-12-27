@@ -1,3 +1,6 @@
-nycu/sdnfv/proxyarp/SomeInterface.class
-nycu/sdnfv/proxyarp/AppComponent$ProxyarpProcessor.class
+nycu/sdnfv/proxyarp/AppComponent$1.class
+nycu/sdnfv/proxyarp/AppComponent$ArpConfigListener.class
 nycu/sdnfv/proxyarp/AppComponent.class
+nycu/sdnfv/proxyarp/SomeInterface.class
+nycu/sdnfv/proxyarp/ProxyarpConfig.class
+nycu/sdnfv/proxyarp/AppComponent$ProxyarpProcessor.class

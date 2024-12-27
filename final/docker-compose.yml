@@ -5,7 +5,7 @@ services:
     hostname: onos
     privileged: true
     environment:
-      - ONOS_APPS=drivers,openflow,gui2,route-service,fpm,fwd
+      - ONOS_APPS=drivers,openflow,gui2,route-service,fpm
     ports:
       - "2620:2620"
       - "6653:6653"
@@ -58,6 +58,7 @@ services:
     privileged: true
     sysctls:
       - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
     cap_add:
       - NET_ADMIN
       - NET_BROADCAST
@@ -74,6 +75,7 @@ services:
     privileged: true
     sysctls:
       - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
     cap_add:
       - NET_ADMIN
       - NET_BROADCAST

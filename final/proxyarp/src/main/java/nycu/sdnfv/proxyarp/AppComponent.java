@@ -15,7 +15,6 @@
  */
 package nycu.sdnfv.proxyarp;
 
-import org.onosproject.cfg.ComponentConfigService;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
@@ -40,6 +39,11 @@ import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.InboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.DefaultOutboundPacket;
+
+import org.onosproject.net.config.ConfigFactory;
+import org.onosproject.net.config.NetworkConfigEvent;
+import org.onosproject.net.config.NetworkConfigListener;
+import org.onosproject.net.config.NetworkConfigRegistry;
 
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.MacAddress;
@@ -66,6 +70,9 @@ import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 
 import java.nio.ByteBuffer;
+import static org.onosproject.net.config.NetworkConfigEvent.Type.CONFIG_ADDED;
+import static org.onosproject.net.config.NetworkConfigEvent.Type.CONFIG_UPDATED;
+import static org.onosproject.net.config.basics.SubjectFactories.APP_SUBJECT_FACTORY;
 
 /**
  * Skeletal ONOS application component.
@@ -75,10 +82,20 @@ public class AppComponent {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final ArpConfigListener arpListener = new ArpConfigListener();
+    private final ConfigFactory<ApplicationId, ProxyarpConfig> factory
+        = new ConfigFactory<ApplicationId, ProxyarpConfig>(
+        APP_SUBJECT_FACTORY, ProxyarpConfig.class, "virtualarp") {
+        @Override
+        public ProxyarpConfig createConfig() {
+            return new ProxyarpConfig();
+        }
+    };
+
     /** Some configurable property. */
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected ComponentConfigService cfgService;
+    protected NetworkConfigRegistry cfgService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
@@ -101,11 +118,18 @@ public class AppComponent {
     private Map<Ip4Address, MacAddress> arpTable = new HashMap<>();
     private Map<Ip6Address, MacAddress> ndpTable = new HashMap<>();
 
+    private MacAddress gatewayMac;
+    private Ip4Address gatewayIP4;
+    private Ip6Address gatewayIP6;
+
     @Activate
     protected void activate() {
 
         // register your app
         appId = coreService.registerApplication("nycu.sdnfv.proxyarp");
+
+        cfgService.addListener(arpListener);
+        cfgService.registerConfigFactory(factory);
 
         // add a packet processor to packetService
         packetService.addProcessor(processor, PacketProcessor.director(2));
@@ -125,6 +149,8 @@ public class AppComponent {
 
     @Deactivate
     protected void deactivate() {
+        cfgService.removeListener(arpListener);
+        cfgService.unregisterConfigFactory(factory);
 
         // remove flowrule installed by your app
         flowRuleService.removeFlowRulesById(appId);
@@ -145,6 +171,29 @@ public class AppComponent {
         log.info("Stopped");
     }
 
+    private class ArpConfigListener implements NetworkConfigListener {
+        @Override
+        public void event(NetworkConfigEvent event) {
+            if ((event.type() == CONFIG_ADDED || event.type() == CONFIG_UPDATED)
+            && event.configClass().equals(ProxyarpConfig.class)) {
+                ProxyarpConfig config =
+                cfgService.getConfig(appId, ProxyarpConfig.class);
+                if (config != null) {
+                    gatewayMac = config.getGatewayMac();
+                    gatewayIP4 = config.getGatewayIPv4();
+                    gatewayIP6 = config.getGatewayIPv6();
+
+                    log.info("gateway-mac: " + gatewayMac);
+                    log.info("gateway-ip4: " + gatewayIP4);
+                    log.info("gateway-ip6: " + gatewayIP6);
+
+                    arpTable.put(gatewayIP4, gatewayMac);
+                    ndpTable.put(gatewayIP6, gatewayMac);
+                }
+            }
+        }
+    }
+
     private class ProxyarpProcessor implements PacketProcessor {
 
         @Override
@@ -157,8 +206,6 @@ public class AppComponent {
 
             InboundPacket pkt = context.inPacket();
             Ethernet ethPkt = pkt.parsed();
-            ARP arpPkt = (ARP) ethPkt.getPayload();
-            short opCode = arpPkt.getOpCode();
 
             if (ethPkt == null) {
                 return;
@@ -167,60 +214,45 @@ public class AppComponent {
             DeviceId recDevId = pkt.receivedFrom().deviceId();
             PortNumber recPort = pkt.receivedFrom().port();
 
-            // Check if the packet is an ARP reply
-            if (opCode == ARP.OP_REPLY) {
-                log.info("RECEIVED REPLY. Requested MAC = " + ethPkt.getDestinationMAC().toString());
-            } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV4) {
+            if (ethPkt.getEtherType() == Ethernet.TYPE_ARP) {
+                ARP arpPkt = (ARP) ethPkt.getPayload();
+                short opCode = arpPkt.getOpCode();
 
-                Ip4Address srcIP  = Ip4Address.valueOf(arpPkt.getSenderProtocolAddress());
-                Ip4Address dstIP  = Ip4Address.valueOf(arpPkt.getTargetProtocolAddress());
-                MacAddress srcMac = ethPkt.getSourceMAC();
-                MacAddress dstMac = arpTable.get(dstIP);
-
-                // Proxy ARP learns IP-MAC mappings of the sender
-                arpTable.put(srcIP, srcMac);
-
-                // Look up the arpTable
-                if (arpTable.get(dstIP) == null) {
-                    log.info("Ipv4 TABLE MISS. Send requset to edge ports");
-                    for (ConnectPoint cp : edgePortService.getEdgePoints()) {
-                        if (cp.equals(pkt.receivedFrom())) {
-                            continue;
-                        } else {
-                            arpRequest(ethPkt, cp.deviceId(), cp.port());
-                        }
-                    }
+                if (opCode == ARP.OP_REPLY) {
+                    // log.info("RECEIVED REPLY. Requested MAC = " + ethPkt.getDestinationMAC().toString());
                 } else if (opCode == ARP.OP_REQUEST) {
-                    log.info("Ipv4 TABLE HIT. Requested MAC = " + dstMac.toString());
-                    arpReply(ethPkt, dstIP, dstMac, recDevId, recPort);
+                    Ip4Address srcIP  = Ip4Address.valueOf(arpPkt.getSenderProtocolAddress());
+                    Ip4Address dstIP  = Ip4Address.valueOf(arpPkt.getTargetProtocolAddress());
+                    MacAddress srcMac = ethPkt.getSourceMAC();
+                    MacAddress dstMac = arpTable.get(dstIP);
+
+                    // Proxy ARP learns IP-MAC mappings of the sender
+                    arpTable.put(srcIP, srcMac);
+
+                    // Look up the arpTable
+                    if (arpTable.get(dstIP) == null) {
+                        // log.info("Ipv4 TABLE MISS. Send requset to edge ports");
+                        for (ConnectPoint cp : edgePortService.getEdgePoints()) {
+                            if (cp.equals(pkt.receivedFrom())) {
+                                continue;
+                            } else {
+                                arpRequest(ethPkt, cp.deviceId(), cp.port());
+                            }
+                        }
+                    } else {
+                        // log.info("Ipv4 TABLE HIT. Requested MAC = " + dstMac.toString());
+                        arpReply(ethPkt, dstIP, dstMac, recDevId, recPort);
+                    }
                 }
             } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
-
-                Ip6Address srcIP  = Ip6Address.valueOf(arpPkt.getSenderProtocolAddress());
-                Ip6Address dstIP  = Ip6Address.valueOf(arpPkt.getTargetProtocolAddress());
-                MacAddress srcMac = ethPkt.getSourceMAC();
-                MacAddress dstMac = ndpTable.get(dstIP);
-
-                findNdp(ethPkt).ifPresent(ndPayload -> {
-                    if (ndPayload instanceof NeighborSolicitation) {
-                        NeighborSolicitation ns = (NeighborSolicitation) ndPayload;
-                        ndpTable.put(srcIP, srcMac);
-
-                        if (dstMac == null) {
-                            log.info("Ipv6 TABLE MISS. Send requset to edge ports");
-                            for (ConnectPoint cp : edgePortService.getEdgePoints()) {
-                                if (cp.equals(pkt.receivedFrom())) {
-                                    continue;
-                                } else {
-                                    arpRequest(ethPkt, cp.deviceId(), cp.port());
-                                }
-                            }
-                        } else {
-                            log.info("Ipv6 TABLE HIT. Send Neighbor Advertisement");
-                            ndpAdv(ethPkt, dstIP, dstMac, recDevId, recPort);
+                findNdp(ethPkt).ifPresentOrElse(
+                    ndp -> neighborSolicitation(context, ethPkt, ndp),
+                    () -> {
+                        if (ethPkt.getPayload() instanceof NeighborAdvertisement) {
+                            ndpAdv(context, ethPkt);
                         }
                     }
-                });
+                );
             }
         }
     }
@@ -254,11 +286,44 @@ public class AppComponent {
                 .findFirst();
     }
 
-    private void ndpAdv(Ethernet ethPkt, Ip6Address dstIP, MacAddress dstMac, DeviceId recDevId, PortNumber recPort) {
-        Ethernet naPkt = NeighborAdvertisement.buildNdpAdv(dstIP, dstMac, ethPkt);
-        ByteBuffer buf = ByteBuffer.wrap(naPkt.serialize());
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder().setOutput(recPort).build();
-        OutboundPacket pkt = new DefaultOutboundPacket(recDevId, treatment, buf);
-        packetService.emit(pkt);
+    private void neighborSolicitation(PacketContext context, Ethernet ethPkt, NeighborSolicitation ndp) {
+        Ip6Address dstIP = Ip6Address.valueOf(ndp.getTargetAddress());
+        MacAddress dstMac = ndpTable.get(dstIP);
+        ConnectPoint inport = context.inPacket().receivedFrom();
+
+        if (dstMac == null) {
+            // log.info("Ipv6 TABLE MISS. Send requset to neighbor solicitation.");
+            for (ConnectPoint cp : edgePortService.getEdgePoints()) {
+                if (cp.equals(inport)) {
+                    continue;
+                }
+                packetOut(context.inPacket(), cp);
+            }
+        } else {
+            Ethernet naResponse = NeighborAdvertisement.buildNdpAdv(dstIP, dstMac, ethPkt);
+            packetService.emit(new DefaultOutboundPacket(
+                context.inPacket().receivedFrom().deviceId(),
+                DefaultTrafficTreatment.builder().setOutput(context.inPacket().receivedFrom().port()).build(),
+                ByteBuffer.wrap(naResponse.serialize())
+            ));
+        }
+    }
+
+    private void packetOut(InboundPacket pkt, ConnectPoint cp) {
+        packetService.emit(
+            new DefaultOutboundPacket(
+                cp.deviceId(),
+                DefaultTrafficTreatment.builder().setOutput(cp.port()).build(),
+                pkt.unparsed()
+            )
+        );
+    }
+
+    private void ndpAdv(PacketContext context, Ethernet ethPkt) {
+        NeighborAdvertisement naPkt = (NeighborAdvertisement) ethPkt.getPayload();
+        Ip6Address srcIp = Ip6Address.valueOf(naPkt.getTargetAddress());
+        MacAddress srcMac = ethPkt.getSourceMAC();
+
+        ndpTable.put(srcIp, srcMac);
     }
 }
