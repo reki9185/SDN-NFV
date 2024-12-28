@@ -26,19 +26,17 @@
     "apps": {
         "nycu.sdnfv.vrouter": {
             "router": {
-                "vrrouting": "of:0000000000000001/3",
-                "vrrouting-mac": "DA:8D:32:C2:1D:EA",
+                "vrrouting": "of:0000000000000001/1",
+                "vrrouting-mac": "1A:05:48:E3:FC:D1",
                 "gateway-ip4": "172.16.4.1",
                 "gateway-ip6": "2a0b:4e07:c4:4::1",
                 "gateway-mac": "00:00:00:00:00:02",
                 "v4-peers": [
                     "192.168.70.253",
-                    "192.168.63.2",
-                    "192.168.63.1",
-                    "192.168.70.1"
+                    "192.168.63.2"
                 ],
                 "v6-peers": [
-                    "fd70::fe", 
+                    "fd70::fe",
                     "fd63::2"
                 ]
             }

@@ -32,7 +32,10 @@ function set_intf_container {
     ipaddr=$3
     echo "Add interface $ifname with ip $ipaddr to container $1"
 
-    ip link set "$ifname" netns "$pid"
+    if ! ip netns exec "$pid" ip link show "$ifname" > /dev/null 2>&1; then
+        ip link set "$ifname" netns "$pid"
+    fi
+
     if [ $# -ge 3 ]
     then
         ip netns exec "$pid" ip addr add "$ipaddr" dev "$ifname"
@@ -134,19 +137,23 @@ sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 other_config:datapath-id=000000000
 # sudo ovs-vsctl add-br ovs1 -- set bridge ovs1 protocols=OpenFlow14 -- set-controller ovs1 tcp:127.0.0.1:6653
 # sudo ovs-vsctl add-br ovs2 -- set bridge ovs2 protocols=OpenFlow14 -- set-controller ovs2 tcp:127.0.0.1:6653
 
-sudo ovs-docker add-port ovs1 vethonos R2 --ipaddress=192.168.100.3/24
-sudo ovs-docker add-port ovs1 eth1 R1 --ipaddress=192.168.63.2/24
-docker exec -it R1 ip -6 addr add fd63::2/64 dev eth1
-sudo ovs-docker add-port ovs1 eth2 R2 --ipaddress=192.168.63.1/24
-docker exec -it R2 ip -6 addr add fd63::1/64 dev eth2
-sudo ovs-docker add-port ovs1 eth3 R2 --ipaddress=172.16.4.69/24
-docker exec -it R2 ip -6 addr add 2a0b:4e07:c4:4::69/64 dev eth3
-sudo ovs-docker add-port ovs2 eth4 R2 --ipaddress=192.168.70.4/24
-docker exec -it R2 ip -6 addr add fd70::4/64 dev eth4
+build_ovs_container_path ovs1 R2 172.16.4.69/24
+set_intf_container R2 vethR2ovs1 192.168.63.1/24
+set_intf_container R2 vethR2ovs1 192.168.70.4/24
+set_intf_container R2 vethR2ovs1 192.168.100.3/24
+set_v6intf_container R2 vethR2ovs1 fd63::1/64
+set_v6intf_container R2 vethR2ovs1 fd70::4/64
+set_v6intf_container R2 vethR2ovs1 2a0b:4e07:c4:4::69/64
+set_v6intf_container R2 vethR2ovs1 2a0b:4e07:c4:4::1/64
+
+build_ovs_container_path ovs1 R1 192.168.63.2/24
+set_v6intf_container R1 vethR1ovs1 fd63::2/64
 # sudo ovs-docker add-port ovs2 eth5 R2 --ipaddress=192.168.61.4/24
-build_ovs_container_path ovs2 h1 172.16.4.2/24 172.16.4.69
-set_v6intf_container h1 vethh1ovs2 2a0b:4e07:c4:4::2/64 2a0b:4e07:c4:4::69
+build_ovs_container_path ovs2 h1 172.16.4.2/24 172.16.4.1
+set_v6intf_container h1 vethh1ovs2 2a0b:4e07:c4:4::2/64 2a0b:4e07:c4:4::1
 build_ovs_path ovs1 ovs2
+
+# sudo ovs-docker add-port ovs1 vethonos onos --ipaddress=192.168.100.1/24
 
 create_veth_pair veth0 veth1
 sudo ovs-vsctl add-port ovs2 veth0

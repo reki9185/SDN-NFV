@@ -214,39 +214,17 @@ public class AppComponent {
 
                     log.info("vrrMac: " + vrrMac);
 
-                    for (IpAddress ip4 : peers4IP) {
-                        // Interface peerIntf = interfaceService.getMatchingInterface
-                        //    (IpAddress.valueOf("192.168.70.4")).connectPoint();
-                        ConnectPoint cp4 = interfaceService.getMatchingInterface(ip4).connectPoint();
-                        peers4Cp.add(cp4);
+                    ConnectPoint cp1 = interfaceService.getMatchingInterface(
+                        IpAddress.valueOf("192.168.70.4")).connectPoint();
+                    ConnectPoint cp2 = interfaceService.getMatchingInterface(
+                        IpAddress.valueOf("192.168.63.1")).connectPoint();
 
-                        // add intent for each peer
-                        // R2: frr
-                        IpAddress vrrIP = (IpAddress) interfaceService.getMatchingInterface(ip4)
-                        .ipAddressesList().get(0).ipAddress();
-                        log.info("Creating IPv4 Intent.");
-                        bgpIntent4(cp4, vrrCp, vrrIP);
-                        bgpIntent4(vrrCp, cp4, ip4);
-                    }
+                    bgpIntent4(cp1, vrrCp, IpAddress.valueOf("192.168.70.4"));
+                    bgpIntent4(vrrCp, cp1, IpAddress.valueOf("192.168.70.253"));
 
-                    /*for (Ip6Address ip6 : peers6IP) {
-                        // Interface peerIntf = interfaceService.getMatchingInterface
-                        // (IpAddress.valueOf("192.168.70.4")).connectPoint();
-                        ConnectPoint cp6 = interfaceService.getMatchingInterface(ip6).connectPoint();
-                        peers6Cp.add(cp6);
+                    bgpIntent4(cp2, vrrCp, IpAddress.valueOf("192.168.63.1"));
+                    bgpIntent4(vrrCp, cp2, IpAddress.valueOf("192.168.63.2"));
 
-                        // add intent for each peer
-                        // R2: frr
-                        Ip6Address vrrIP = (Ip6Address) interfaceService.getMatchingInterface(ip6)
-                        .ipAddressesList().stream()
-                            .filter(ip -> ip.ipAddress().isIp6())
-                            .map(InterfaceIpAddress::ipAddress)
-                            .findFirst()
-                            .orElse(null);
-                        log.info("Creating IPv6 Intent.");
-                        bgpIntent6(cp6, vrrCp, vrrIP);
-                        bgpIntent6(vrrCp, cp6, ip6);
-                    }*/
                 }
             }
         }
@@ -283,9 +261,7 @@ public class AppComponent {
                 // ResolvedRoute route = inRoute(context, dstIP);
                 log.info("The packet is from `{}` to `{}`.", srcIP, dstIP);
 
-                context.block();
                 interDomain(context);
-                context.send();
 
             } // else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6)
         }
@@ -344,6 +320,7 @@ public class AppComponent {
             IpAddress srcIP = IpAddress.valueOf(payload.getSourceAddress());
             IpAddress dstIP = IpAddress.valueOf(payload.getDestinationAddress());
 
+            MacAddress srcMac = context.inPacket().parsed().getSourceMAC();
             MacAddress dstMac = context.inPacket().parsed().getDestinationMAC();
 
             if (dstMac.equals(vrrMac)) {
@@ -353,10 +330,11 @@ public class AppComponent {
 
                 // dstHost not exist -> in other area
                 if (dstHost == null) {
+                    log.info("Host {} is not here.", dstIP);
                     transiant(context);
                 } else {
                     ConnectPoint ingress = pkt.receivedFrom();
-                    ConnectPoint egress = new ConnectPoint(dstHost.location().deviceId(), dstHost.location().port());
+                    ConnectPoint egress = dstHost.location();
 
                     TrafficSelector selector = DefaultTrafficSelector.builder()
                         .matchIPDst(dstIP.toIpPrefix())
@@ -364,11 +342,12 @@ public class AppComponent {
                         .build();
 
                     TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                        .setEthSrc(gatewayMac)
+                        .setEthSrc(srcMac)
                         .setEthDst(dstHost.mac())
                         .build();
 
                     createIntent(ingress, egress, selector, treatment);
+                    context.send();
                 }
             } else {
                 // vrr -> external
@@ -389,7 +368,7 @@ public class AppComponent {
                     .build();
 
                 TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                    .setEthSrc(vrrMac)
+                    .setEthSrc(srcMac)
                     .setEthDst(route.nextHopMac())
                     .build();
 
