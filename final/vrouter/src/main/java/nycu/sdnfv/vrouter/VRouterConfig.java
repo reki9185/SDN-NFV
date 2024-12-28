@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.function.Function;
 
 public class VRouterConfig extends Config<ApplicationId> {
-    public static final String FRROUTING = "frrouting";
-    public static final String FRROUTING_MAC = "frrouting-mac";
+    public static final String VRROUTING = "vrrouting";
+    public static final String VRROUTING_MAC = "vrrouting-mac";
     public static final String GATEWAY_IP4 = "gateway-ip4";
     public static final String GATEWAY_IP6 = "gateway-ip6";
     public static final String GATEWAY_MAC = "gateway-mac";
@@ -25,15 +25,15 @@ public class VRouterConfig extends Config<ApplicationId> {
 
     @Override
     public boolean isValid() {
-        return hasFields(FRROUTING, FRROUTING_MAC, GATEWAY_IP4, GATEWAY_IP6, GATEWAY_MAC, V4_PEERS, V6_PEERS);
+        return hasFields(VRROUTING, VRROUTING_MAC, GATEWAY_IP4, GATEWAY_IP6, GATEWAY_MAC, V4_PEERS, V6_PEERS);
     }
 
-    public ConnectPoint getFrroutingCP() {
-        return ConnectPoint.fromString(get(FRROUTING, null));
+    public ConnectPoint getVrroutingCP() {
+        return ConnectPoint.fromString(get(VRROUTING, null));
     }
 
-    public MacAddress getFrroutingMac() {
-        return MacAddress.valueOf(get(FRROUTING_MAC, null));
+    public MacAddress getVrroutingMac() {
+        return MacAddress.valueOf(get(VRROUTING_MAC, null));
     }
 
     public IpAddress getGatewayIPv4() {

@@ -1,6 +1,6 @@
 {
     "ports": {
-       "of:0000000000000001/1": {
+       "of:0000000000000001/2": {
             "interfaces": [
                 {
                     "name": "intf1",
@@ -26,8 +26,8 @@
     "apps": {
         "nycu.sdnfv.vrouter": {
             "router": {
-                "frrouting": "of:0000000000000001/4",
-                "frrouting-mac": "EE:86:28:B5:CE:9B",
+                "vrrouting": "of:0000000000000001/3",
+                "vrrouting-mac": "DA:8D:32:C2:1D:EA",
                 "gateway-ip4": "172.16.4.1",
                 "gateway-ip6": "2a0b:4e07:c4:4::1",
                 "gateway-mac": "00:00:00:00:00:02",

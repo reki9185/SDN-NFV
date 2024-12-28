@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 
-import org.onosproject.net.packet.PacketPriority;
+// import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketContext;
@@ -62,10 +62,10 @@ import org.onosproject.net.edge.EdgePortService;
 
 import org.onosproject.net.flow.FlowRuleService;
 
-import org.onosproject.net.flow.TrafficSelector;
+// import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
-import org.onosproject.net.flow.DefaultTrafficSelector;
+// import org.onosproject.net.flow.DefaultTrafficSelector;
 
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 
@@ -134,16 +134,6 @@ public class AppComponent {
         // add a packet processor to packetService
         packetService.addProcessor(processor, PacketProcessor.director(2));
 
-        // install a flowrule for ipv4 packet-in
-        TrafficSelector.Builder selectorIpv4 = DefaultTrafficSelector.builder();
-        selectorIpv4.matchEthType(Ethernet.TYPE_IPV4);
-        packetService.requestPackets(selectorIpv4.build(), PacketPriority.REACTIVE, appId);
-
-        // install a flowrule for ipv6 packet-in
-        TrafficSelector.Builder selectorIpv6 = DefaultTrafficSelector.builder();
-        selectorIpv6.matchEthType(Ethernet.TYPE_IPV6);
-        packetService.requestPackets(selectorIpv6.build(), PacketPriority.REACTIVE, appId);
-
         log.info("Started");
     }
 
@@ -158,15 +148,6 @@ public class AppComponent {
         // remove your packet processor
         packetService.removeProcessor(processor);
         processor = null;
-
-        // remove flowrule you installed for packet-in
-        TrafficSelector.Builder selectorIpv4 = DefaultTrafficSelector.builder();
-        selectorIpv4.matchEthType(Ethernet.TYPE_IPV4);
-        packetService.cancelPackets(selectorIpv4.build(), PacketPriority.REACTIVE, appId);
-
-        TrafficSelector.Builder selectorIpv6 = DefaultTrafficSelector.builder();
-        selectorIpv6.matchEthType(Ethernet.TYPE_IPV6);
-        packetService.cancelPackets(selectorIpv6.build(), PacketPriority.REACTIVE, appId);
 
         log.info("Stopped");
     }
@@ -218,17 +199,17 @@ public class AppComponent {
                 ARP arpPkt = (ARP) ethPkt.getPayload();
                 short opCode = arpPkt.getOpCode();
 
+                Ip4Address srcIP  = Ip4Address.valueOf(arpPkt.getSenderProtocolAddress());
+                Ip4Address dstIP  = Ip4Address.valueOf(arpPkt.getTargetProtocolAddress());
+                MacAddress srcMac = ethPkt.getSourceMAC();
+                MacAddress dstMac = arpTable.get(dstIP);
+
+                // Proxy ARP learns IP-MAC mappings of the sender
+                arpTable.putIfAbsent(srcIP, srcMac);
+
                 if (opCode == ARP.OP_REPLY) {
                     // log.info("RECEIVED REPLY. Requested MAC = " + ethPkt.getDestinationMAC().toString());
                 } else if (opCode == ARP.OP_REQUEST) {
-                    Ip4Address srcIP  = Ip4Address.valueOf(arpPkt.getSenderProtocolAddress());
-                    Ip4Address dstIP  = Ip4Address.valueOf(arpPkt.getTargetProtocolAddress());
-                    MacAddress srcMac = ethPkt.getSourceMAC();
-                    MacAddress dstMac = arpTable.get(dstIP);
-
-                    // Proxy ARP learns IP-MAC mappings of the sender
-                    arpTable.put(srcIP, srcMac);
-
                     // Look up the arpTable
                     if (arpTable.get(dstIP) == null) {
                         // log.info("Ipv4 TABLE MISS. Send requset to edge ports");
@@ -324,6 +305,6 @@ public class AppComponent {
         Ip6Address srcIp = Ip6Address.valueOf(naPkt.getTargetAddress());
         MacAddress srcMac = ethPkt.getSourceMAC();
 
-        ndpTable.put(srcIp, srcMac);
+        ndpTable.putIfAbsent(srcIp, srcMac);
     }
 }
