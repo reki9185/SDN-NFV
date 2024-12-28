@@ -8,7 +8,7 @@ onosproject/onos:2.7-latest
 	sudo ./topo_utils.sh
 
 install:
-	onos-app localhost install! bridge-app/target/bridge-app-1.0-SNAPSHOT.oar
+#	onos-app localhost install! bridge-app/target/bridge-app-1.0-SNAPSHOT.oar
 	onos-app localhost install! vrouter/target/vrouter-1.0-SNAPSHOT.oar
 	onos-app localhost install! proxyarp/target/proxyarp-1.0-SNAPSHOT.oar
 	onos-netcfg localhost vrouter.json
@@ -18,8 +18,8 @@ uninstall:
 	onos-app localhost uninstall nycu.sdnfv.vrouter
 	onos-app localhost deactivate nycu.sdnfv.proxyarp
 	onos-app localhost uninstall nycu.sdnfv.proxyarp
-	onos-app localhost deactivate nycu.sdnfv.bridge
-	onos-app localhost uninstall nycu.sdnfv.bridge
+#	onos-app localhost deactivate nycu.sdnfv.bridge
+#	onos-app localhost uninstall nycu.sdnfv.bridge
 
 clean:
 	docker compose down

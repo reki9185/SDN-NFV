@@ -68,7 +68,7 @@ import org.onosproject.net.intent.MultiPointToSinglePointIntent;
 
 import org.onosproject.net.intf.InterfaceService;
 
-import org.onosproject.net.host.InterfaceIpAddress;
+// import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.Host;
 
@@ -229,7 +229,7 @@ public class AppComponent {
                         bgpIntent4(vrrCp, cp4, ip4);
                     }
 
-                    for (Ip6Address ip6 : peers6IP) {
+                    /*for (Ip6Address ip6 : peers6IP) {
                         // Interface peerIntf = interfaceService.getMatchingInterface
                         // (IpAddress.valueOf("192.168.70.4")).connectPoint();
                         ConnectPoint cp6 = interfaceService.getMatchingInterface(ip6).connectPoint();
@@ -246,7 +246,7 @@ public class AppComponent {
                         log.info("Creating IPv6 Intent.");
                         bgpIntent6(cp6, vrrCp, vrrIP);
                         bgpIntent6(vrrCp, cp6, ip6);
-                    }
+                    }*/
                 }
             }
         }
@@ -257,7 +257,6 @@ public class AppComponent {
         public void process(PacketContext context) {
 
             if (context.isHandled()) {
-                log.info("Hi.");
                 return;
             }
 
@@ -282,7 +281,7 @@ public class AppComponent {
                 IpAddress dstIP = IpAddress.valueOf(payload.getDestinationAddress());
                 IpAddress srcIP = IpAddress.valueOf(payload.getSourceAddress());
                 // ResolvedRoute route = inRoute(context, dstIP);
-                log.info("The packet is from `{}` to `{}`.", recDevId, dstIP);
+                log.info("The packet is from `{}` to `{}`.", srcIP, dstIP);
 
                 context.block();
                 interDomain(context);
