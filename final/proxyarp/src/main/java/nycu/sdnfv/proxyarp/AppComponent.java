@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 
-// import org.onosproject.net.packet.PacketPriority;
+import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketContext;
@@ -54,6 +54,7 @@ import org.onlab.packet.Ip6Address;
 import org.onlab.packet.ndp.NeighborAdvertisement;
 import org.onlab.packet.ndp.NeighborSolicitation;
 import org.onlab.packet.IPacket;
+import org.onlab.packet.ICMP6;
 
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.DeviceId;
@@ -62,10 +63,10 @@ import org.onosproject.net.edge.EdgePortService;
 
 import org.onosproject.net.flow.FlowRuleService;
 
-// import org.onosproject.net.flow.TrafficSelector;
+import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
-// import org.onosproject.net.flow.DefaultTrafficSelector;
+import org.onosproject.net.flow.DefaultTrafficSelector;
 
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 
@@ -134,6 +135,14 @@ public class AppComponent {
         // add a packet processor to packetService
         packetService.addProcessor(processor, PacketProcessor.director(2));
 
+        TrafficSelector.Builder ipv4Selector = DefaultTrafficSelector.builder();
+        ipv4Selector.matchEthType(Ethernet.TYPE_ARP);
+        packetService.requestPackets(ipv4Selector.build(), PacketPriority.REACTIVE, appId);
+
+        TrafficSelector.Builder ipv6Selector = DefaultTrafficSelector.builder();
+        ipv6Selector.matchEthType(Ethernet.TYPE_IPV6);
+        packetService.requestPackets(ipv6Selector.build(), PacketPriority.REACTIVE, appId);
+
         log.info("Started");
     }
 
@@ -148,6 +157,14 @@ public class AppComponent {
         // remove your packet processor
         packetService.removeProcessor(processor);
         processor = null;
+
+        TrafficSelector.Builder ipv4Selector = DefaultTrafficSelector.builder();
+        ipv4Selector.matchEthType(Ethernet.TYPE_ARP);
+        packetService.cancelPackets(ipv4Selector.build(), PacketPriority.REACTIVE, appId);
+
+        TrafficSelector.Builder ipv6Selector = DefaultTrafficSelector.builder();
+        ipv6Selector.matchEthType(Ethernet.TYPE_IPV6);
+        packetService.cancelPackets(ipv6Selector.build(), PacketPriority.REACTIVE, appId);
 
         log.info("Stopped");
     }
@@ -226,14 +243,42 @@ public class AppComponent {
                     }
                 }
             } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
-                findNdp(ethPkt).ifPresentOrElse(
-                    ndp -> neighborSolicitation(context, ethPkt, ndp),
-                    () -> {
-                        if (ethPkt.getPayload() instanceof NeighborAdvertisement) {
-                            ndpAdv(context, ethPkt);
+                // log.info("hi.");
+                IPv6 payload = (IPv6) ethPkt.getPayload();
+                if (payload.getNextHeader() == IPv6.PROTOCOL_ICMP6) {
+                    Ip6Address srcIP = Ip6Address.valueOf(payload.getSourceAddress());
+                    MacAddress srcMac = ethPkt.getSourceMAC();
+
+                    ndpTable.putIfAbsent(srcIP, srcMac);
+                    ICMP6 icmp6Payload = (ICMP6) payload.getPayload();
+                    // if is neighbor advertisement
+                    if (icmp6Payload.getIcmpType() == ICMP6.NEIGHBOR_ADVERTISEMENT) {
+                        NeighborAdvertisement ndpPkt = (NeighborAdvertisement) icmp6Payload.getPayload();
+
+                        Ip6Address dstIP = Ip6Address.valueOf(ndpPkt.getTargetAddress());
+                        MacAddress dstMac = srcMac;
+                        ndpTable.put(dstIP, dstMac);
+
+                    // if is neighbor solicitation
+                    } else if (icmp6Payload.getIcmpType() == ICMP6.NEIGHBOR_SOLICITATION) {
+                        NeighborSolicitation ndpPkt = (NeighborSolicitation) icmp6Payload.getPayload();
+
+                        Ip6Address dstIP = Ip6Address.valueOf(ndpPkt.getTargetAddress());
+                        MacAddress dstMac = ndpTable.get(dstIP);
+                        if (dstMac == null) {
+                            // log.info("Ipv6 TABLE MISS. Send requset to edge ports");
+                            for (ConnectPoint cp : edgePortService.getEdgePoints()) {
+                                if (recDevId != cp.deviceId() || recPort != cp.port()) {
+                                    packetOut(cp.deviceId(), cp.port(), ByteBuffer.wrap(ethPkt.serialize()));
+                                }
+                            }
+                        } else {
+                            Ethernet packet = NeighborAdvertisement.buildNdpAdv(dstIP, dstMac, ethPkt);
+                            packetOut(recDevId, recPort, ByteBuffer.wrap(packet.serialize()));
+                            // log.info("Ipv6 TABLE HIT. Requested MAC = " + dstMac.toString());
                         }
                     }
-                );
+                }
             }
         }
     }
@@ -278,7 +323,7 @@ public class AppComponent {
                 if (cp.equals(inport)) {
                     continue;
                 }
-                packetOut(context.inPacket(), cp);
+                // packetOut(context.inPacket(), cp);
             }
         } else {
             Ethernet naResponse = NeighborAdvertisement.buildNdpAdv(dstIP, dstMac, ethPkt);
@@ -290,14 +335,11 @@ public class AppComponent {
         }
     }
 
-    private void packetOut(InboundPacket pkt, ConnectPoint cp) {
-        packetService.emit(
-            new DefaultOutboundPacket(
-                cp.deviceId(),
-                DefaultTrafficTreatment.builder().setOutput(cp.port()).build(),
-                pkt.unparsed()
-            )
-        );
+    private void packetOut(DeviceId devId, PortNumber port, ByteBuffer buffer) {
+        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+        .setOutput(port).build();
+        OutboundPacket outboundPacket = new DefaultOutboundPacket(devId, treatment, buffer);
+        packetService.emit(outboundPacket);
     }
 
     private void ndpAdv(PacketContext context, Ethernet ethPkt) {
