@@ -159,4 +159,8 @@ create_veth_pair veth0 veth1
 sudo ovs-vsctl add-port ovs2 veth0
 sudo ip a add 192.168.100.1/24 dev veth1
 
-# sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4
+set_intf_container R2 vethR2ovs1 192.168.65.4/24
+
+sudo ovs-vsctl add-port ovs2 TO_A_VXLAN -- set interface TO_A_VXLAN type=vxlan options:remote_ip=192.168.61.5
+sudo ovs-vsctl add-port ovs2 TO_B_VXLAN -- set interface TO_B_VXLAN type=vxlan options:remote_ip=192.168.61.6
+sudo ovs-vsctl add-port ovs2 TO_TA_VXLAN -- set interface TO_TA_VXLAN type=vxlan options:remote_ip=192.168.60.4

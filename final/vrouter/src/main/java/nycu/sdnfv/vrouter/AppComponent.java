@@ -355,8 +355,27 @@ public class AppComponent {
                 // Check here the next hop is
                 ResolvedRoute route = inRoute(context, dstIP);
                 if (route == null) {
-                    log.info("Next hop doesn't exist.");
-                    return;
+                    log.info("The next hop doesn't exist.");
+                    Host dstHost = hostService.getHostsByIp(dstIP).iterator().next();
+
+                    if (dstHost == null) {
+                        return;
+                    }
+
+                    ConnectPoint ingress = pkt.receivedFrom();
+                    ConnectPoint egress = dstHost.location();
+
+                    TrafficSelector selector = DefaultTrafficSelector.builder()
+                        .matchIPDst(dstIP.toIpPrefix())
+                        .matchEthType(Ethernet.TYPE_IPV4)
+                        .build();
+
+                    TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                        .setEthSrc(srcMac)
+                        .setEthDst(dstHost.mac())
+                        .build();
+
+                    createIntent(ingress, egress, selector, treatment);
                 }
 
                 ConnectPoint ingress = pkt.receivedFrom();
