@@ -5,7 +5,7 @@ import org.onosproject.net.config.Config;
 import org.onosproject.net.ConnectPoint;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.IpAddress;
-import org.onlab.packet.Ip6Address;
+// import org.onlab.packet.Ip6Address;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -40,8 +40,8 @@ public class VRouterConfig extends Config<ApplicationId> {
         return IpAddress.valueOf(get(GATEWAY_IP4, null));
     }
 
-    public Ip6Address getGatewayIPv6() {
-        return Ip6Address.valueOf(get(GATEWAY_IP6, null));
+    public IpAddress getGatewayIPv6() {
+        return IpAddress.valueOf(get(GATEWAY_IP6, null));
     }
 
     public MacAddress getGatewayMac() {
@@ -59,12 +59,12 @@ public class VRouterConfig extends Config<ApplicationId> {
         return peersIp;
     }
 
-    public ArrayList<Ip6Address> getIPv6Peers() {
+    public ArrayList<IpAddress> getIPv6Peers() {
         List<String> peers = getList(V6_PEERS, func);
-        ArrayList<Ip6Address> peersIp = new ArrayList<>();
+        ArrayList<IpAddress> peersIp = new ArrayList<>();
 
         for (String peerIp : peers) {
-            peersIp.add(Ip6Address.valueOf(peerIp));
+            peersIp.add(IpAddress.valueOf(peerIp));
         }
 
         return peersIp;

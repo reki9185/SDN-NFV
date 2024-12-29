@@ -38,7 +38,7 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IPv4;
-// import org.onlab.packet.IPv6;
+import org.onlab.packet.IPv6;
 // import org.onlab.packet.IpPrefix;
 
 import org.onosproject.core.ApplicationId;
@@ -117,12 +117,12 @@ public class AppComponent {
     ConnectPoint vrrCp;
     MacAddress vrrMac;
     IpAddress gatewayIP4;
-    Ip6Address gatewayIP6;
+    IpAddress gatewayIP6;
     MacAddress gatewayMac;
 
     ArrayList<IpAddress> peers4IP = new ArrayList<IpAddress>();
     ArrayList<ConnectPoint> peers4Cp = new ArrayList<ConnectPoint>();
-    ArrayList<Ip6Address> peers6IP = new ArrayList<Ip6Address>();
+    ArrayList<IpAddress> peers6IP = new ArrayList<IpAddress>();
     ArrayList<ConnectPoint> peers6Cp = new ArrayList<ConnectPoint>();
 
     /** Some configurable property. */
@@ -168,9 +168,13 @@ public class AppComponent {
         packetService.addProcessor(processor, PacketProcessor.director(3));
 
         // install a flowrule for packet-in
-        TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
-        selector.matchEthType(Ethernet.TYPE_IPV4);
-        packetService.requestPackets(selector.build(), PacketPriority.REACTIVE, appId);
+        TrafficSelector.Builder ipv4Selector = DefaultTrafficSelector.builder();
+        ipv4Selector.matchEthType(Ethernet.TYPE_IPV4);
+        packetService.requestPackets(ipv4Selector.build(), PacketPriority.REACTIVE, appId);
+
+        TrafficSelector.Builder ipv6Selector = DefaultTrafficSelector.builder();
+        ipv6Selector.matchEthType(Ethernet.TYPE_IPV6);
+        packetService.requestPackets(ipv6Selector.build(), PacketPriority.REACTIVE, appId);
         log.info("Started");
     }
 
@@ -189,9 +193,13 @@ public class AppComponent {
         processor = null;
 
         // remove flowrule you installed for packet-in
-        TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
-        selector.matchEthType(Ethernet.TYPE_IPV4);
-        packetService.cancelPackets(selector.build(), PacketPriority.REACTIVE, appId);
+        TrafficSelector.Builder ipv4Selector = DefaultTrafficSelector.builder();
+        ipv4Selector.matchEthType(Ethernet.TYPE_IPV4);
+        packetService.cancelPackets(ipv4Selector.build(), PacketPriority.REACTIVE, appId);
+
+        TrafficSelector.Builder ipv6Selector = DefaultTrafficSelector.builder();
+        ipv6Selector.matchEthType(Ethernet.TYPE_IPV6);
+        packetService.cancelPackets(ipv6Selector.build(), PacketPriority.REACTIVE, appId);
         log.info("Stopped");
     }
 
@@ -224,6 +232,17 @@ public class AppComponent {
 
                     bgpIntent4(cp2, vrrCp, IpAddress.valueOf("192.168.63.1"));
                     bgpIntent4(vrrCp, cp2, IpAddress.valueOf("192.168.63.2"));
+
+                    ConnectPoint cp61 = interfaceService.getMatchingInterface(
+                        IpAddress.valueOf("fd70::4")).connectPoint();
+                    ConnectPoint cp62 = interfaceService.getMatchingInterface(
+                        IpAddress.valueOf("fd63::1")).connectPoint();
+
+                    bgpIntent6(cp61, vrrCp, IpAddress.valueOf("fd70::4"));
+                    bgpIntent6(vrrCp, cp61, IpAddress.valueOf("fd70::fe"));
+
+                    bgpIntent6(cp62, vrrCp, IpAddress.valueOf("fd63::1"));
+                    bgpIntent6(vrrCp, cp62, IpAddress.valueOf("fd63::2"));
 
                 }
             }
@@ -263,7 +282,13 @@ public class AppComponent {
 
                 interDomain(context);
 
-            } // else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6)
+            } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
+                IPv6 payload = (IPv6) ethPkt.getPayload();
+                Ip6Address dstIP = Ip6Address.valueOf(payload.getDestinationAddress());
+                Ip6Address srcIP = Ip6Address.valueOf(payload.getSourceAddress());
+                log.info("The packet is from `{}` to `{}`.", srcIP, dstIP);
+                interDomain(context);
+            }
         }
     }
 
@@ -297,10 +322,10 @@ public class AppComponent {
         createIntent(ingress, egress, selector, treatment);
     }
 
-    private void bgpIntent6(ConnectPoint ingress, ConnectPoint egress, Ip6Address dstIP) {
+    private void bgpIntent6(ConnectPoint ingress, ConnectPoint egress, IpAddress dstIP) {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                     .matchEthType(Ethernet.TYPE_IPV6)
-                    .matchIPDst(dstIP.toIpPrefix())
+                    .matchIPv6Dst(dstIP.toIpPrefix())
                     .build();
         TrafficTreatment treatment = DefaultTrafficTreatment.emptyTreatment();
         createIntent(ingress, egress, selector, treatment);
@@ -355,27 +380,8 @@ public class AppComponent {
                 // Check here the next hop is
                 ResolvedRoute route = inRoute(context, dstIP);
                 if (route == null) {
-                    log.info("The next hop doesn't exist.");
-                    Host dstHost = hostService.getHostsByIp(dstIP).iterator().next();
-
-                    if (dstHost == null) {
-                        return;
-                    }
-
-                    ConnectPoint ingress = pkt.receivedFrom();
-                    ConnectPoint egress = dstHost.location();
-
-                    TrafficSelector selector = DefaultTrafficSelector.builder()
-                        .matchIPDst(dstIP.toIpPrefix())
-                        .matchEthType(Ethernet.TYPE_IPV4)
-                        .build();
-
-                    TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                        .setEthSrc(srcMac)
-                        .setEthDst(dstHost.mac())
-                        .build();
-
-                    createIntent(ingress, egress, selector, treatment);
+                    log.info("Next hop doesn't exist.");
+                    return;
                 }
 
                 ConnectPoint ingress = pkt.receivedFrom();
@@ -384,6 +390,65 @@ public class AppComponent {
                 TrafficSelector selector = DefaultTrafficSelector.builder()
                     .matchIPDst(dstIP.toIpPrefix())
                     .matchEthType(Ethernet.TYPE_IPV4)
+                    .build();
+
+                TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                    .setEthSrc(srcMac)
+                    .setEthDst(route.nextHopMac())
+                    .build();
+
+                createIntent(ingress, egress, selector, treatment);
+            }
+        } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
+            IPv6 payload = (IPv6) ethPkt.getPayload();
+            Ip6Address srcIP = Ip6Address.valueOf(payload.getSourceAddress());
+            Ip6Address dstIP = Ip6Address.valueOf(payload.getDestinationAddress());
+
+            MacAddress srcMac = context.inPacket().parsed().getSourceMAC();
+            MacAddress dstMac = context.inPacket().parsed().getDestinationMAC();
+
+            if (dstMac.equals(vrrMac)) {
+                // external -> vrr
+                // srcMac: gatewayMac | dstMac: dstMac
+                Host dstHost = hostService.getHostsByIp(dstIP).iterator().next();
+
+                // dstHost not exist -> in other area
+                if (dstHost == null) {
+                    log.info("Host {} is not here.", dstIP);
+                    transiant(context);
+                } else {
+                    ConnectPoint ingress = pkt.receivedFrom();
+                    ConnectPoint egress = dstHost.location();
+
+                    TrafficSelector selector = DefaultTrafficSelector.builder()
+                        .matchIPv6Dst(dstIP.toIpPrefix())
+                        .matchEthType(Ethernet.TYPE_IPV6)
+                        .build();
+
+                    TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                        .setEthSrc(srcMac)
+                        .setEthDst(dstHost.mac())
+                        .build();
+
+                    createIntent(ingress, egress, selector, treatment);
+                    context.send();
+                }
+            } else {
+                // vrr -> external
+                // srcMac: vrrMac | dstMac: nextHop
+                // Check here the next hop is
+                ResolvedRoute route = inRoute(context, dstIP);
+                if (route == null) {
+                    log.info("Next hop doesn't exist.");
+                    return;
+                }
+
+                ConnectPoint ingress = pkt.receivedFrom();
+                ConnectPoint egress = interfaceService.getMatchingInterface(route.nextHop()).connectPoint();
+
+                TrafficSelector selector = DefaultTrafficSelector.builder()
+                    .matchIPv6Dst(dstIP.toIpPrefix())
+                    .matchEthType(Ethernet.TYPE_IPV6)
                     .build();
 
                 TrafficTreatment treatment = DefaultTrafficTreatment.builder()
@@ -439,7 +504,46 @@ public class AppComponent {
                             .build();
                 intentService.submit(intent);
             }
-        } // else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6)
+        } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
+            IPv6 payload = (IPv6) ethPkt.getPayload();
+            Ip6Address srcIP = Ip6Address.valueOf(payload.getSourceAddress());
+            Ip6Address dstIP = Ip6Address.valueOf(payload.getDestinationAddress());
+
+            ResolvedRoute route = inRoute(context, dstIP);
+            if (route != null) {
+                ConnectPoint egress = interfaceService.getMatchingInterface(route.nextHop()).connectPoint();
+                FilteredConnectPoint egressPoint = new FilteredConnectPoint(egress);
+                Set<FilteredConnectPoint> ingresses = new HashSet<FilteredConnectPoint>();
+
+                for (ConnectPoint ingress : peers6Cp) {
+                    if (!ingress.equals(egress)) {
+                        ingresses.add(new FilteredConnectPoint(ingress));
+                        log.info("Intent `{}`, port `{}` => `{}`, port `{}` is submitted.",
+                            ingress.deviceId(), ingress.port(), egress.deviceId(), egress.port());
+                    }
+                }
+
+                TrafficSelector selector = DefaultTrafficSelector.builder()
+                        .matchIPv6Dst(route.nextHop().toIpPrefix())
+                        .matchEthType(Ethernet.TYPE_IPV6)
+                        .build();
+
+                TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                    .setEthSrc(vrrMac)
+                    .setEthDst(route.nextHopMac())
+                    .build();
+
+                MultiPointToSinglePointIntent intent = MultiPointToSinglePointIntent.builder()
+                            .appId(appId)
+                            .selector(selector)
+                            .treatment(treatment)
+                            .filteredIngressPoints(ingresses)
+                            .filteredEgressPoint(egressPoint)
+                            .priority(300)
+                            .build();
+                intentService.submit(intent);
+            }
+        }
     }
 
     private ResolvedRoute inRoute(PacketContext context, IpAddress dstIP) {
@@ -451,6 +555,17 @@ public class AppComponent {
             RouteTableId tableId = new RouteTableId("ipv4");
             Collection<RouteInfo> routes = routeService.getRoutes(tableId);
             for (RouteInfo routeInfo : routes) {
+                ResolvedRoute route = routeInfo.bestRoute().get();
+                if (route.prefix().contains(dstIP)) {
+                    log.info("Dst: {}, Next Hop: {}", routeInfo.prefix(), routeInfo.bestRoute().get().nextHop());
+                    return route;
+                }
+            }
+        } else if (ethPkt.getEtherType() == Ethernet.TYPE_IPV6) {
+            RouteTableId tableId = new RouteTableId("ipv6");
+            Collection<RouteInfo> routes = routeService.getRoutes(tableId);
+            for (RouteInfo routeInfo : routes) {
+                log.info("Dst: {}, Next Hop: {}", routeInfo.prefix(), routeInfo.bestRoute().get().nextHop());
                 ResolvedRoute route = routeInfo.bestRoute().get();
                 if (route.prefix().contains(dstIP)) {
                     log.info("Dst: {}, Next Hop: {}", routeInfo.prefix(), routeInfo.bestRoute().get().nextHop());

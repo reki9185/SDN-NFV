@@ -59,6 +59,7 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.all.autoconf=0
     cap_add:
       - NET_ADMIN
       - NET_BROADCAST
@@ -76,6 +77,7 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.all.autoconf=0
     cap_add:
       - NET_ADMIN
       - NET_BROADCAST
