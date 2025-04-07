@@ -56,6 +56,7 @@
 
 ### Lab5: Network Function Virtualization --Software Router and Containerization
 Connect to ONOS CLI
+
 `ssh -o "StrictHostKeyChecking =no" -o Globa lKnownHostsFile =/de v/null
 -o UserK nownHostsFile=/de v/null onos@lo cal host -p 8101`
 
